@@ -100,6 +100,25 @@ def get_args():
         action='store_true',
         help='Allow CLOSE gesture to send Alt+F4 to Google Earth (off by default)',
     )
+
+    # Unity integration
+    parser.add_argument(
+        '--control-unity',
+        action='store_true',
+        help='Send gesture payloads to a Unity app via UDP',
+    )
+    parser.add_argument(
+        '--unity-host',
+        default='127.0.0.1',
+        help='UDP host for Unity receiver (default: 127.0.0.1)',
+    )
+    parser.add_argument(
+        '--unity-port',
+        type=int,
+        default=7777,
+        help='UDP port for Unity receiver (default: 7777)',
+    )
+
     parser.add_argument(
         '--preset',
         choices=['demo-smooth', 'demo-fast', 'debug'],
@@ -231,6 +250,16 @@ def main():
     )
     active_payload = command_payload(CMD_NONE, 0.0, "init", ux_state=UX_IDLE)
     last_printed_command = CMD_NONE
+
+    unity_bridge = None
+    if args.control_unity:
+        from utils.unity_bridge import UnityBridge
+
+        unity_bridge = UnityBridge(host=args.unity_host, port=args.unity_port)
+        print(
+            f"Unity control enabled. Sending UDP payloads to "
+            f"{args.unity_host}:{args.unity_port}"
+        )
 
     earth_bridge = None
     if args.control_earth:
@@ -386,6 +415,9 @@ def main():
             earth_bridge.tick(stable_command)
             active_payload["earth_status"] = earth_bridge.last_status
 
+        if unity_bridge is not None:
+            unity_bridge.tick(active_payload)
+
         debug_image = draw_point_history(debug_image, point_history)
         debug_image = draw_info(debug_image, fps, mode, number)
         debug_image = draw_command_panel(
@@ -399,6 +431,8 @@ def main():
 
     cap.release()
     cv.destroyAllWindows()
+    if unity_bridge is not None:
+        unity_bridge.close()
 
 
 def select_mode(key, mode):
