@@ -21,6 +21,7 @@ from utils.gesture_command import (
     UX_IDLE,
     command_payload,
 )
+from utils.simple_gesture import classify as classify_simple_gesture
 from model import KeyPointClassifier
 from model import PointHistoryClassifier
 
@@ -117,6 +118,19 @@ def get_args():
         type=int,
         default=7777,
         help='UDP port for Unity receiver (default: 7777)',
+    )
+
+    # Landmark streaming — Phase 1 hand skeleton digital twin
+    parser.add_argument(
+        '--stream-landmarks',
+        action='store_true',
+        help='Stream raw 21-landmark positions to Unity for hand skeleton visualization',
+    )
+    parser.add_argument(
+        '--landmark-port',
+        type=int,
+        default=7778,
+        help='UDP port for landmark streaming to Unity (default: 7778)',
     )
 
     parser.add_argument(
@@ -261,6 +275,16 @@ def main():
             f"{args.unity_host}:{args.unity_port}"
         )
 
+    landmark_bridge = None
+    if args.stream_landmarks:
+        from utils.landmark_bridge import LandmarkBridge
+
+        landmark_bridge = LandmarkBridge(host=args.unity_host, port=args.landmark_port)
+        print(
+            f"Landmark streaming enabled. Sending to "
+            f"{args.unity_host}:{args.landmark_port}"
+        )
+
     earth_bridge = None
     if args.control_earth:
         from utils.earth_bridge import EarthBridge
@@ -314,6 +338,11 @@ def main():
         raw_source = "no_hand"
         hand_sign_text = ""
         finger_gesture_text = ""
+        # Landmark-stream state — populated inside the detection loop
+        _lm_cache = None
+        _simple_cmd = "IDLE"
+        _index_x = 0.0
+        _index_y = 0.0
 
         #  ####################################################################
         if results.multi_hand_landmarks is not None:
@@ -375,6 +404,14 @@ def main():
                     hand_sign_text,
                     finger_gesture_text,
                 )
+
+                if landmark_bridge is not None:
+                    # Classify with the robust distance-based rule
+                    # (rotation-invariant, independent of the trained classifier)
+                    _simple_cmd = classify_simple_gesture(hand_landmarks.landmark)
+                    _index_x = float(hand_landmarks.landmark[8].x)
+                    _index_y = float(hand_landmarks.landmark[8].y)
+                    _lm_cache = [(lm.x, lm.y, lm.z) for lm in hand_landmarks.landmark]
         else:
             point_history.append([0, 0])
             command_mapper.reset_hand_tracking()
@@ -386,6 +423,24 @@ def main():
                 command_stabilizer.update(CMD_RESET_VIEW)
 
         stable_command, confidence = command_stabilizer.update(raw_command)
+
+        # Send the landmark packet with the SIMPLE classifier output
+        # (distinct from stable_command; the simple one is rotation-invariant
+        # and is what the Unity controller drives the camera from).
+        if landmark_bridge is not None:
+            if _lm_cache is not None:
+                landmark_bridge.send(
+                    _lm_cache,
+                    command=_simple_cmd,
+                    index_x=_index_x,
+                    index_y=_index_y,
+                )
+            else:
+                landmark_bridge.send_no_hand()
+
+            # Debug print: every frame, exactly what Unity receives
+            print(f"UDP SEND: {_simple_cmd} | Index: {_index_x:.2f}, {_index_y:.2f}")
+
         active_payload = command_payload(
             stable_command,
             confidence,
@@ -395,21 +450,17 @@ def main():
             ux_state=command_mapper.ux_state,
         )
 
-        if verbose and raw_command != CMD_NONE:
-            print(
-                f"[RAW] {raw_command} src={raw_source} "
-                f"ux={command_mapper.ux_state}"
-            )
-
-        if stable_command != last_printed_command and stable_command != CMD_NONE:
-            print(
-                f"[COMMAND] {stable_command} "
-                f"({GE_ACTIONS.get(stable_command, '')}) "
-                f"conf={confidence:.0%} src={raw_source}"
-            )
-            last_printed_command = stable_command
-        elif stable_command == CMD_NONE:
-            last_printed_command = CMD_NONE
+        # Old trained-classifier prints disabled — the new UDP SEND line
+        # below is the single source of truth for what Unity sees.
+        # (Re-enable by uncommenting if you need to debug the old pipeline.)
+        # if verbose and raw_command != CMD_NONE:
+        #     print(f"[RAW] {raw_command} src={raw_source} ux={command_mapper.ux_state}")
+        # if stable_command != last_printed_command and stable_command != CMD_NONE:
+        #     print(f"[COMMAND] {stable_command} ({GE_ACTIONS.get(stable_command, '')}) "
+        #           f"conf={confidence:.0%} src={raw_source}")
+        #     last_printed_command = stable_command
+        # elif stable_command == CMD_NONE:
+        #     last_printed_command = CMD_NONE
 
         if earth_bridge is not None:
             earth_bridge.tick(stable_command)
@@ -433,6 +484,8 @@ def main():
     cv.destroyAllWindows()
     if unity_bridge is not None:
         unity_bridge.close()
+    if landmark_bridge is not None:
+        landmark_bridge.close()
 
 
 def select_mode(key, mode):

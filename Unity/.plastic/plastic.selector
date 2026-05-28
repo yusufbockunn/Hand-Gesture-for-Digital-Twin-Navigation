@@ -1,0 +1,4 @@
+repository "HandGestureProject 2026-05-28_17-45-50/HandGestureProject@18967188353683@cloud"
+  path "/"
+    br "/main"
+    co "/main"
