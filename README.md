@@ -1,26 +1,433 @@
-🌍 Hand Gesture Controlled Earth Navigation SystemThis project is a real-time geographical simulation system that enables navigation on Earth using standard webcam hand gestures (without any physical input devices). It seamlessly bridges a Python (MediaPipe) backend with a Unity (Cesium for Unity) frontend over the UDP protocol.The control mechanics offer a fluid, Minority Report and Google Earth-style experience, powered by damped panning and zooming algorithms that dynamically scale based on the camera's true geographical altitude.📺 Project Media & DemoSample Project Screenshot <img width="1915" height="861" alt="image" src="https://github.com/user-attachments/assets/672b7a42-79ed-457f-a7dd-a03ad5108e18" /> <img width="1919" height="938" alt="image" src="https://github.com/user-attachments/assets/7307a211-1c55-4e2f-94a2-d1dfacf22d39" />
+# 🌍 Hand Gesture Controlled Earth Navigation System
 
-Demo Video▶️ Project Showcase and Demo Video (YouTube / Drive Link)🛠️ System Architecture & Technology StackThe system consists of an independent data-processing backend (Python) and a high-performance visualization/simulation frontend (Unity). Communication between the two layers is handled via asynchronous UDP sockets to minimize latency.[ Webcam Stream ] 
+<div align="center">
+
+![Unity](https://img.shields.io/badge/Unity-2022+-black?style=for-the-badge\&logo=unity)
+![Python](https://img.shields.io/badge/Python-3.10+-blue?style=for-the-badge\&logo=python)
+![MediaPipe](https://img.shields.io/badge/MediaPipe-Computer%20Vision-orange?style=for-the-badge)
+![Cesium](https://img.shields.io/badge/Cesium-3D%20GIS-green?style=for-the-badge)
+![UDP](https://img.shields.io/badge/Protocol-UDP-red?style=for-the-badge)
+
+### Real-Time Gesture-Based Geospatial Navigation using Computer Vision & Cesium for Unity
+
+Navigate the Earth using only your hands — no mouse, no controller, no VR hardware.
+
+Inspired by **Minority Report**, **Google Earth**, and futuristic Human-Computer Interaction systems.
+
+</div>
+
+---
+
+# 📺 Demo & Preview
+
+## 🌆 Project Screenshot
+
+ <img width="1915" height="861" alt="image" src="https://github.com/user-attachments/assets/672b7a42-79ed-457f-a7dd-a03ad5108e18" /> <img width="1919" height="938" alt="image" src="https://github.com/user-attachments/assets/7307a211-1c55-4e2f-94a2-d1dfacf22d39" />
+
+
+
+---
+
+## 🎥 Demo Video
+
+▶️ Youtube Link
+
+```md
+[Watch Demo Video]
+```
+
+---
+
+# 🧠 Project Overview
+
+This project is a **real-time geographical simulation and interaction system** that enables users to navigate a full-scale 3D Earth using standard webcam hand gestures.
+
+The system combines:
+
+* 🖐️ **Computer Vision Hand Tracking**
+* 🌍 **Real-Time Geospatial Rendering**
+* 📡 **Low-Latency UDP Networking**
+* 🧭 **Adaptive Camera Navigation**
+* 🛰️ **Cesium's WGS84 Globe System**
+
+A Python backend powered by **MediaPipe** detects and classifies hand gestures, while a Unity frontend powered by **Cesium for Unity** visualizes and navigates a photorealistic Earth environment.
+
+---
+
+# 🏗️ System Architecture
+
+```text
+[ Webcam Stream ]
        │
        ▼
-[ Python Backend (MediaPipe) ] ──( UDP Packets / JSON : 7778 )──► [ Unity Frontend (Cesium) ]
-       │                                                                  │
-       ├─► 21 Joint Coordinate Extraction                                 ├─► Queue Draining (Thread-safe)
-       └─► Gesture Classification (Command Engine)                        └─► Geographic Transform & Camera Lock
-1. Python Backend (Data Provider & Processor)MediaPipe Hands: Analyzes the camera feed in real-time, extracting 21 3D joint positions (landmarks) within milliseconds.Gesture Classifier Engine: Computes relative distances and angles between specific landmarks to translate hand shapes into four core commands: ZOOM_IN, ZOOM_OUT, PAN, and IDLE.UDP Frame Streaming: Bundles the classified command along with the normalized screen coordinates of the index fingertip (index_x, index_y) into a JSON string, broadcasting it over the local network at a stable 30 FPS.2. Unity Frontend (Simulation & Visualization Core)Cesium for Unity: The core geographical engine. It dynamically streams global geospatial data and Google Photorealistic 3D Tilesets based on the precise WGS84 ellipsoid globe model.CesiumGlobeAnchor & CesiumOriginShift: Solves the notorious Floating Origin Problem (precision loss, vertex jittering, and physics crashes caused by 32-bit floating-point limits when traveling thousands of kilometers). As the camera moves across the globe, the engine mathematically shifts the world center back to (0,0,0) to maintain absolute rendering stability.Asynchronous UDP Receiver: Listens for incoming network packets on a dedicated background thread using a Thread-safe ConcurrentQueue to avoid blocking Unity's Main Thread. Packets are safely drained and consumed inside Unity's standard Update loop.🚀 Key Features & Solved Technical Challenges🌐 Locale-Immune Coordinate ParsingIn operating systems configured with non-US locales (e.g., Turkish, German, French), Unity's Inspector parses public numeric floating-point inputs using the system's local culture settings. This causes a dot (.) to be misinterpreted as a thousands separator rather than a decimal separator, silently corrupting coordinates and teleporting the camera into the middle of the ocean. This project fixes this fundamentally by taking coordinate inputs as raw text (string) fields and parsing them using CultureInfo.InvariantCulture while normalizing both commas and dots.📉 Adaptive Damping & Differential Pan TechnologyWhen the camera is in deep space (e.g., 2,500,000 meters), a 1 cm hand movement should shift the view across entire continents. However, down at the city level (e.g., 1,500 meters), the same movement must allow for precise street-by-street micro-panning. The pan algorithm resolves this by reading the true geographic altitude (longitudeLatitudeHeight.z) every frame and scaling the input delta proportionally.High Altitude: Multiplies speed for continental mega-transitions.Low Altitude: Dampens speed for precise urban street navigation.Jitter and sudden tracking spikes are filtered using a 3-stage defense mechanism: Raw Delta Clamp, Linear Altitude Scaling, and a hard Velocity Ceiling.📐 Nadir View Orientation Lock (Gimbal Lock Prevention)When looking straight down at the Earth at a perfect 90-degree angle (Nadir View), Unity's traditional transform.forward vector aligns with the gravity axis, reducing its horizontal projection to zero and completely breaking forward/backward panning. The system circumvents this by calculating the cross-product (Vector3.Cross) between the camera's local right vector (transform.right) and the true world-up vector, generating a flawless horizontal movement plane regardless of pitch adjustments.🦴 Origin Shift Compatible Persistent HUD (Skeleton Overlay)When Cesium abruptly teleports the world coordinates to reset precision (Origin Shift), hand skeleton visualizer overlays tracked in world space would fly out of the camera's view frustum or suffer heavy jitter. In the updated architecture, the hand tracker is hierarchically parented to the Main Camera (SetParent) at runtime, switching its positioning to localPosition space. This guarantees that even if the entire world shifts beneath it, the hand HUD remains locked perfectly and seamlessly in front of the camera.🛠️ Installation & Setup1. Preparing the Python BackendInstall the necessary dependencies and launch the landmark stream server:# Install dependencies
-pip install opencv-python mediapipe
+[ Python Backend (MediaPipe) ]
+       │
+       ├─► 21 Joint Coordinate Extraction
+       ├─► Gesture Classification Engine
+       └─► UDP JSON Streaming (Port 7778)
+                        │
+                        ▼
+[ Unity Frontend (Cesium for Unity) ]
+       │
+       ├─► Thread-safe Queue Receiver
+       ├─► Geographic Coordinate Transform
+       ├─► Adaptive Camera Controller
+       └─► Real-Time Earth Navigation
+```
 
-# Run the python application in streaming mode
+---
+
+# ⚙️ Technology Stack
+
+| Layer             | Technology                       |
+| ----------------- | -------------------------------- |
+| Computer Vision   | MediaPipe Hands                  |
+| Backend           | Python                           |
+| Networking        | UDP Sockets                      |
+| Frontend          | Unity                            |
+| GIS Engine        | Cesium for Unity                 |
+| 3D Globe          | Google Photorealistic 3D Tiles   |
+| Coordinate System | WGS84 Ellipsoid                  |
+| Concurrency       | ConcurrentQueue / Multithreading |
+
+---
+
+# 🖐️ Python Backend
+
+The Python backend acts as the **gesture processing and data provider layer**.
+
+## 🔍 Features
+
+### ✅ Real-Time Hand Tracking
+
+Using **MediaPipe Hands**, the system extracts:
+
+* 21 hand landmarks
+* 3D joint positions
+* fingertip coordinates
+* gesture states
+
+all in real time with extremely low latency.
+
+---
+
+### 🧠 Gesture Classification Engine
+
+The classifier analyzes:
+
+* Relative landmark distances
+* Finger states
+* Joint angles
+* Motion patterns
+
+to generate four core commands:
+
+| Gesture | Action     |
+| ------- | ---------- |
+| ✊       | `ZOOM_IN`  |
+| 🖐️     | `ZOOM_OUT` |
+| ☝️      | `PAN`      |
+| Idle    | `IDLE`     |
+
+---
+
+### 📡 UDP Streaming
+
+Processed gesture data is serialized into JSON packets and streamed to Unity at ~30 FPS.
+
+Example packet:
+
+```json
+{
+  "command": "PAN",
+  "index_x": 0.52,
+  "index_y": 0.31
+}
+```
+
+---
+
+# 🌍 Unity Frontend
+
+The Unity application acts as the **visualization and simulation core**.
+
+Powered by **Cesium for Unity**, the frontend renders the entire Earth with photorealistic 3D streaming.
+
+---
+
+## 🌐 Cesium Integration
+
+### Features
+
+* Real-scale globe rendering
+* WGS84 geospatial coordinates
+* Google Photorealistic 3D Tiles
+* Infinite world streaming
+* Precision-safe global traversal
+
+---
+
+## 📉 Floating Origin Problem Solution
+
+Large-scale worlds suffer from floating-point precision loss.
+
+This project solves that using:
+
+* `CesiumGlobeAnchor`
+* `CesiumOriginShift`
+
+The world origin is dynamically re-centered to maintain:
+
+* Rendering stability
+* Physics stability
+* Accurate transformations
+* Jitter-free movement
+
+even when traveling across continents.
+
+---
+
+# 🚀 Key Technical Features
+
+## 🌐 Locale-Independent Coordinate Parsing
+
+Operating systems using non-US locales (Turkish, German, French, etc.) may interpret decimal separators incorrectly.
+
+Example:
+
+```text
+30.5181 → 305181
+```
+
+This causes catastrophic coordinate corruption.
+
+### ✅ Solution
+
+Coordinates are parsed using:
+
+```csharp
+CultureInfo.InvariantCulture
+```
+
+while normalizing both:
+
+* `,`
+* `.`
+
+decimal separators safely.
+
+---
+
+# 📉 Adaptive Damping & Differential Pan System
+
+The system dynamically scales movement speed according to the camera’s real geographic altitude.
+
+## High Altitude
+
+At:
+
+```text
+2,500,000m
+```
+
+small hand movement results in continental-scale transitions.
+
+---
+
+## Low Altitude
+
+At:
+
+```text
+1,500m
+```
+
+the same movement enables precise street-level navigation.
+
+---
+
+## ✨ Jitter Protection Pipeline
+
+Movement smoothing uses a 3-stage defense mechanism:
+
+1. Raw Delta Clamp
+2. Linear Altitude Scaling
+3. Velocity Ceiling
+
+This creates stable and cinematic motion.
+
+---
+
+# 📐 Nadir View Orientation Lock
+
+When looking directly downward:
+
+```text
+Pitch ≈ 90°
+```
+
+traditional forward vectors collapse due to gimbal-related directional degeneracy.
+
+### ✅ Solution
+
+The system computes movement using:
+
+```csharp
+Vector3.Cross(transform.right, worldUp)
+```
+
+which guarantees stable horizontal panning regardless of camera pitch.
+
+---
+
+# 🦴 Persistent Skeleton HUD
+
+When Cesium performs an Origin Shift, world-space overlays normally jitter or disappear.
+
+### ✅ Solution
+
+The hand skeleton renderer is:
+
+* Parent-attached to the Main Camera
+* Rendered using `localPosition`
+* Fully decoupled from shifting world coordinates
+
+Result:
+
+✔ Stable overlay
+✔ No jitter
+✔ Persistent HUD visibility
+
+---
+
+# 🛠️ Installation
+
+# 1️⃣ Python Backend Setup
+
+Install dependencies:
+
+```bash
+pip install opencv-python mediapipe
+```
+
+Run the backend:
+
+```bash
 python app.py --stream-landmarks --landmark-port 7778
-2. Preparing the Unity FrontendClone this repository and add the Unity folder to your Unity Hub.Open your main scene and ensure that the CesiumGeoreference and Google Photorealistic 3D Tiles game objects are active.Select the EarthGestureController script in the Inspector and input your desired start location (e.g., for Central Eskişehir: Longitude Text: 30.5181, Latitude Text: 39.7711, Altitude Text: 2000).Press the Play button in Unity.📁 Repository Structure├── .git
-├── .gitignore               # Root and project-specific Git ignore rules
-├── README.md                # English Project documentation
-├── hand-gesture-backend/    # Python MediaPipe source code and classifier
-└── Unity/                   # Unity Project directory (Assets, Packages, Settings)
+```
+
+---
+
+# 2️⃣ Unity Frontend Setup
+
+## Clone Repository
+
+```bash
+git clone https://github.com/your-username/earth-gesture-navigation.git
+```
+
+---
+
+## Open Unity Project
+
+Add the `Unity/` folder into Unity Hub.
+
+---
+
+## Configure Scene
+
+Ensure the following objects are active:
+
+* `CesiumGeoreference`
+* `Google Photorealistic 3D Tiles`
+
+---
+
+## Configure Start Location
+
+Example (Central Eskişehir):
+
+| Field     | Value     |
+| --------- | --------- |
+| Longitude | `30.5181` |
+| Latitude  | `39.7711` |
+| Altitude  | `2000`    |
+
+---
+
+## Run
+
+Press:
+
+```text
+▶ Play
+```
+
+inside Unity Editor.
+
+---
+
+# 📁 Repository Structure
+
+```text
+├── .git
+├── .gitignore
+├── README.md
+├── hand-gesture-backend/
+│   ├── app.py
+│   ├── classifier.py
+│   └── networking/
+│
+└── Unity/
     └── Assets/
         └── Scripts/
             └── HandTracking/
-                ├── HandLandmarkReceiver.cs     # UDP Receiver & JSON Parser
-                ├── HandSkeletonVisualizer.cs   # HUD Hand Skeleton Renderer
-                └── EarthGestureController.cs   # Core Geospatial Movement Controller
-This project was developed to showcase the integration of computer vision-based Human-Computer Interaction (HCI) principles with modern 3D GIS (Geographic Information Systems) engines.
+                ├── HandLandmarkReceiver.cs
+                ├── HandSkeletonVisualizer.cs
+                └── EarthGestureController.cs
+```
+
+---
+
+# 🎯 Future Improvements
+
+* ✋ Multi-hand gesture support
+* 🥽 VR integration
+* 🤖 AI gesture prediction
+* 🌎 Multiplayer collaborative navigation
+* 🧭 Gesture customization UI
+* 📱 Mobile camera streaming
+
+---
+
+# 🧪 Research & Academic Context
+
+This project was developed as an exploration of:
+
+* Human-Computer Interaction (HCI)
+* Computer Vision
+* Real-Time GIS Systems
+* Spatial Computing
+* Gesture-Based Interfaces
+* Large-Scale Simulation Architectures
+
+It demonstrates how modern CV pipelines can seamlessly integrate with advanced geospatial engines for immersive interaction systems.
+
+# ⭐ Acknowledgements
+
+* [MediaPipe](https://github.com/google/mediapipe)
+* [Cesium for Unity](https://cesium.com/platform/cesium-for-unity/)
+* [Google Photorealistic 3D Tiles](https://developers.google.com/maps/documentation/tile)
+* Unity Technologies
+
+---
+
+# 📜 License
+
+This project is licensed under the MIT License.
+
+```text
+MIT License © 2026 Yusuf Böçkün-Cem Levent Avcı
+```
+
+---
