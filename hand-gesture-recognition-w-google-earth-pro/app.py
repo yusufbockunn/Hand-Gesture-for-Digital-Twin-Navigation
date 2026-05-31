@@ -471,11 +471,6 @@ def main():
 
         debug_image = draw_point_history(debug_image, point_history)
         debug_image = draw_info(debug_image, fps, mode, number)
-        debug_image = draw_command_panel(
-            debug_image,
-            active_payload,
-            earth_control_enabled=earth_bridge is not None,
-        )
 
         # Screen reflection #############################################################
         cv.imshow(WINDOW_NAME, debug_image)
@@ -825,81 +820,6 @@ def draw_point_history(image, point_history):
             cv.circle(image, (point[0], point[1]), 1 + int(index / 2),
                       (152, 251, 152), 2)
 
-    return image
-
-
-def draw_command_panel(image, payload, earth_control_enabled=False):
-    h, w = image.shape[:2]
-    panel_h = 132 if earth_control_enabled else 118
-    cv.rectangle(image, (0, h - panel_h), (w, h), (32, 32, 32), -1)
-
-    command = payload.get("command", CMD_NONE)
-    conf = payload.get("confidence", 0.0)
-    earth = payload.get("earth_action", "")
-    hand_sign = payload.get("hand_sign", "")
-    finger = payload.get("finger_gesture", "")
-    earth_status = payload.get("earth_status", "idle")
-    ux_state = payload.get("ux_state", "IDLE")
-
-    # Line 1: Command (left) + UX State (right)
-    cmd_color = (80, 220, 120) if command != CMD_NONE else (180, 180, 180)
-    cv.putText(image, f"Command: {command}", (12, h - panel_h + 28),
-               cv.FONT_HERSHEY_SIMPLEX, 0.85, cmd_color, 2, cv.LINE_AA)
-    cv.putText(image, f"State: {ux_state}", (w // 2, h - panel_h + 28),
-               cv.FONT_HERSHEY_SIMPLEX, 0.55, (180, 180, 210), 1, cv.LINE_AA)
-
-    # Line 2: Earth action
-    cv.putText(image, f"Action: {earth}", (12, h - panel_h + 52),
-               cv.FONT_HERSHEY_SIMPLEX, 0.55, (220, 220, 220), 1, cv.LINE_AA)
-
-    # Line 3: Gesture + Confidence
-    gesture_text = f"Gesture: {hand_sign}"
-    if finger:
-        gesture_text += f" + {finger}"
-    gesture_text += f"   Confidence: {conf:.0%}"
-    cv.putText(image, gesture_text, (12, h - panel_h + 76),
-               cv.FONT_HERSHEY_SIMPLEX, 0.48, (200, 200, 200), 1, cv.LINE_AA)
-
-    # Line 4: Hint
-    cv.putText(
-        image,
-        "Open=pan  Closed=zoom in  OK=zoom out  Stop hold=stop  R=reset",
-        (12, h - panel_h + 98),
-        cv.FONT_HERSHEY_SIMPLEX,
-        0.38,
-        (160, 160, 160),
-        1,
-        cv.LINE_AA,
-    )
-
-    # Line 5: Earth control status (if enabled)
-    if earth_control_enabled:
-        _status_colors = {
-            "driving": (100, 200, 255),
-            "stopped": (100, 255, 180),
-            "applied": (100, 255, 180),
-            "blocked": (80, 80, 200),
-        }
-        _status_labels = {
-            "idle": "idle",
-            "waiting": "waiting",
-            "driving": "driving",
-            "stopped": "stopped",
-            "applied": "applied",
-            "blocked": "blocked (CLOSE disabled)",
-        }
-        ge_label = _status_labels.get(earth_status, earth_status)
-        ge_color = _status_colors.get(earth_status, (180, 180, 180))
-        cv.putText(
-            image,
-            f"Control: {ge_label}",
-            (12, h - panel_h + 118),
-            cv.FONT_HERSHEY_SIMPLEX,
-            0.45,
-            ge_color,
-            1,
-            cv.LINE_AA,
-        )
     return image
 
 
